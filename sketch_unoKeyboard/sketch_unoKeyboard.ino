@@ -1,58 +1,117 @@
-/* Arduino USB HID Keyboard Demo
- * Type 'Push to Talk' (z key), 'Mute Game' (Ctrl + Page Up), or 'Deafen' (Ctrl + Shift + D) When Buttons are Pressed
- */
+uint8_t buf[8] = {0};  // Keyboard Report Buffer: 8 bytes
 
-uint8_t buf[8] = {0}; 	/* Keyboard report buffer */
-const int buttonPushToTalkPin = 2;  // Push button for 'Push to Talk' (z key) connected to digital pin 2
-const int buttonMuteGamePin = 3;  // Push button for 'Mute Game' (Ctrl + Page Up) connected to digital pin 3
-const int buttonDeafenPin = 4;  // Push button for 'Deafen' (Ctrl + Shift + D) connected to digital pin 4
+#define PIN_PUSH_TO_TALK 2
+#define PIN_MUTE_GAME 3
+#define PIN_DEAFEN 4
+
+bool currState_PushToTalk = HIGH;
+bool currState_MuteGame = HIGH;
+bool currState_Deafen = HIGH;
+          
+bool prevState_PushToTalk = HIGH; 
+bool prevState_MuteGame = HIGH; 
+bool prevState_Deafen = HIGH; 
+
+unsigned long prevTime_PushToTalk = 0;
+unsigned long prevTime_MuteGame = 0;
+unsigned long prevTime_Deafen = 0;
+
+unsigned long waitTime_PushToTalk = 50;
+unsigned long waitTime_MuteGame = 50;
+unsigned long waitTime_Deafen = 50;
 
 void setup() 
 {
-  pinMode(buttonPushToTalkPin, INPUT_PULLUP);  // Set pin mode with internal pull-up resistor
-  pinMode(buttonMuteGamePin, INPUT_PULLUP);  // Set pin mode with internal pull-up resistor
-  pinMode(buttonDeafenPin, INPUT_PULLUP);  // Set pin mode with internal pull-up resistor
   Serial.begin(9600);
+
+  pinMode(PIN_PUSH_TO_TALK, INPUT_PULLUP);
+  pinMode(PIN_MUTE_GAME, INPUT_PULLUP);
+  pinMode(PIN_DEAFEN, INPUT_PULLUP);
+  
   delay(200);
 }
 
 void loop() 
 {
-  if (digitalRead(buttonPushToTalkPin) == LOW)  // Check if the 'Push to Talk' button is pressed
-  {
-    buf[2] = 29;  // Keycode for 'z'
-    Serial.write(buf, 8);  // Send keypress
-    delay(100);  // Debounce delay
-    releaseKey();
+  checkButton();
+}
+
+void checkButton() {
+  bool currRead_PushToTalk = digitalRead(PIN_PUSH_TO_TALK);
+  bool currRead_MuteGame = digitalRead(PIN_MUTE_GAME);
+  bool currRead_Deafen = digitalRead(PIN_DEAFEN);
+
+  if (currRead_PushToTalk != prevState_PushToTalk) {
+    prevTime_PushToTalk = millis();
   }
-  else if (digitalRead(buttonMuteGamePin) == LOW)  // Check if the 'Mute Game' button is pressed
-  {
-    buf[0] = 0x01;  // Modifier byte: 0x01 for Ctrl
-    buf[2] = 0x4B;  // Keycode for 'Page Up'
-    Serial.write(buf, 8);  // Send keypress
-    delay(100);  // Debounce delay
-    releaseKey();
-    delay(1000);  // delay before it can be pressed again
+  if (currRead_MuteGame != prevState_MuteGame) {
+    prevTime_MuteGame = millis();
   }
-  else if (digitalRead(buttonDeafenPin) == LOW)  // Check if the 'Deafen' button is pressed
-  {
-    buf[0] = 0x03;  // Modifier byte: 0x03 for Ctrl + Shift
-    buf[2] = 7;  // Keycode for 'd'
-    Serial.write(buf, 8);  // Send keypress
-    delay(100);  // Debounce delay
-    releaseKey();
-    delay(1000);  // delay before it can be pressed again
+  if (currRead_Deafen != prevState_Deafen) {
+    prevTime_Deafen = millis();
   }
-  else
-  {
-    releaseKey();  // Release any pressed key if no button is pressed
-    delay(100);  // Debounce delay
+
+  if ((millis() - prevTime_PushToTalk) > waitTime_PushToTalk) {
+    if (currRead_PushToTalk != currState_PushToTalk) {
+      currState_PushToTalk = currRead_PushToTalk;
+      if (currState_PushToTalk == LOW) {
+        // Send the code
+        buf[2] = 29;    // HID: z key
+#ifdef SERIAL_DEBUG
+        buf[2] = 'z';     // Serial: z key
+#endif
+        Serial.write(buf, 8); // Send keypress
+      } else {
+        // Release the keyboard
+        releaseKey();
+      }
+    }
   }
+  if ((millis() - prevTime_MuteGame) > waitTime_MuteGame) {
+    if (currRead_MuteGame != currState_MuteGame) {
+      currState_MuteGame = currRead_MuteGame;
+      if (currState_MuteGame == LOW) {
+        // Send the code
+        buf[0] = 0x01;  // Modifier byte: 0x01 for Ctrl
+        buf[2] = 0x4B;  // HID: Page Up key
+#ifdef SERIAL_DEBUG
+        buf[0] = 0;
+        buf[2] = 'P';  // Serial: Page Up key
+#endif
+        Serial.write(buf, 8); // Send keypress
+      } else {
+        // Release the keyboard
+        releaseKey();
+      }
+    }
+  }
+  if ((millis() - prevTime_Deafen) > waitTime_Deafen) {
+    if (currRead_Deafen != currState_Deafen) {
+      currState_Deafen = currRead_Deafen;
+      if (currState_Deafen == LOW) {
+        // Send the code
+        buf[0] = 0x03;  // Modifier byte: 0x03 for Ctrl + Shift
+        buf[2] = 7;    // HID: d key
+#ifdef SERIAL_DEBUG
+        buf[0] = 0;
+        buf[2] = 'd';  // Serial: d key
+#endif
+        Serial.write(buf, 8); // Send keypress
+      } else {
+        // Release the keyboard
+        releaseKey();
+      }
+    }
+  }
+
+  prevState_PushToTalk = currRead_PushToTalk;
+  prevState_MuteGame = currRead_MuteGame;
+  prevState_Deafen = currRead_Deafen;
 }
 
 void releaseKey() 
 {
   buf[0] = 0;
   buf[2] = 0;
-  Serial.write(buf, 8);  // Release key  
+  Serial.write(buf, 8); // Release key  
 }
